@@ -11,6 +11,11 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
+try:
+    from winotify import Notification
+except ImportError:
+    Notification = None
+
 BASE = Path(__file__).resolve().parent
 CONFIG_FILE = BASE / "config.json"
 TOKEN_FILE = BASE / "token.json"
@@ -39,6 +44,20 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s"
 )
+
+def notify(title, message):
+    if Notification is None:
+        logging.warning("Desktop notification skipped because winotify is unavailable.")
+        return
+
+    try:
+        Notification(
+            app_id="YouTube Clip Uploader",
+            title=title,
+            msg=message
+        ).show()
+    except Exception:
+        logging.exception("Desktop notification failed.")
 
 def load_config():
     if not CONFIG_FILE.exists():
@@ -318,9 +337,11 @@ def process_file(youtube, path, watch, cfg):
             playlist_id,
             video_id
         )
+        notify("Clip uploaded", title)
 
     except Exception:
         logging.exception("Failed: %s", path)
+        notify("Clip upload failed", f"{game} — {path.name}")
 
         try:
             safe_move(
@@ -355,6 +376,10 @@ def main():
     )
 
     logging.info("Found %d clip(s).", len(clips))
+
+    if clips:
+        noun = "clip" if len(clips) == 1 else "clips"
+        notify("Clips found", f"Found {len(clips)} {noun} ready to upload.")
 
     for path in clips:
         process_file(youtube, path, watch, cfg)
