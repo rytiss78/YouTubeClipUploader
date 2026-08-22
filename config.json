@@ -1,0 +1,17 @@
+{
+    "watch_folder": "M:\\Videos\\Radeon ReLive",
+    "uploaded_folder": "M:\\Videos\\Radeon ReLive\\YouTubeUploader\\Uploaded",
+    "failed_folder": "M:\\Videos\\Radeon ReLive\\YouTubeUploader\\Failed",
+    "privacy": "public",
+    "playlist_privacy": "public",
+    "category_id": "20",
+    "title_format": "{game} \u2014 {filename}",
+    "description": "Automatically uploaded gameplay clip.",
+    "tags": [
+        "gameplay",
+        "gaming",
+        "clip"
+    ],
+    "stable_checks": 3,
+    "stable_seconds": 5
+}
