@@ -1,5 +1,6 @@
 import json
 import logging
+import logging.handlers
 import shutil
 import time
 from pathlib import Path
@@ -21,6 +22,7 @@ CONFIG_FILE = BASE / "config.json"
 TOKEN_FILE = BASE / "token.json"
 CLIENT_SECRET_FILE = BASE / "client_secret.json"
 LOG_FILE = BASE / "uploader.log"
+HASH_DB_FILE = BASE / ".uploaded_hashes.json"
 
 # Playlist creation/editing requires the broader YouTube scope.
 SCOPES = ["https://www.googleapis.com/auth/youtube"]
@@ -39,11 +41,20 @@ DEFAULT_CONFIG = {
     "stable_seconds": 5
 }
 
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s"
+# Rotating log: 5 MB per file, keep 3 backups (~20 MB total)
+_log_handler = logging.handlers.RotatingFileHandler(
+    LOG_FILE,
+    maxBytes=5 * 1024 * 1024,
+    backupCount=3,
+    encoding="utf-8",
 )
+_log_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
+
+logging.basicConfig(
+    level=logging.INFO,
+    handlers=[_log_handler],
+)
+
 
 def notify(title, message):
     if Notification is None:
@@ -59,6 +70,7 @@ def notify(title, message):
     except Exception:
         logging.exception("Desktop notification failed.")
 
+
 def load_config():
     if not CONFIG_FILE.exists():
         CONFIG_FILE.write_text(json.dumps(DEFAULT_CONFIG, indent=4), encoding="utf-8")
@@ -70,6 +82,7 @@ def load_config():
     merged = DEFAULT_CONFIG.copy()
     merged.update(cfg)
     return merged
+
 
 def get_credentials():
     creds = None
@@ -103,8 +116,10 @@ def get_credentials():
     TOKEN_FILE.write_text(creds.to_json(), encoding="utf-8")
     return creds
 
+
 def youtube_service():
     return build("youtube", "v3", credentials=get_credentials())
+
 
 def is_inside(path, parent):
     try:
@@ -112,6 +127,7 @@ def is_inside(path, parent):
         return True
     except ValueError:
         return False
+
 
 def find_mp4s(watch, excluded_dirs):
     for p in watch.rglob("*.mp4"):
@@ -130,6 +146,7 @@ def find_mp4s(watch, excluded_dirs):
             continue
 
         yield p
+
 
 def wait_until_stable(path, checks, interval):
     last_size = -1
@@ -151,6 +168,7 @@ def wait_until_stable(path, checks, interval):
 
     return True
 
+
 def game_name(path, watch):
     rel = path.resolve().relative_to(watch.resolve())
 
@@ -158,6 +176,7 @@ def game_name(path, watch):
         return rel.parts[0]
 
     return path.parent.name
+
 
 def make_title(path, watch, cfg):
     game = game_name(path, watch)
@@ -167,6 +186,7 @@ def make_title(path, watch, cfg):
         game=game,
         filename=filename
     )[:100]
+
 
 def make_tags(path, watch, cfg):
     game = game_name(path, watch)
@@ -180,6 +200,24 @@ def make_tags(path, watch, cfg):
             result.append(tag)
 
     return result
+
+
+def _load_hash_db():
+    if HASH_DB_FILE.exists():
+        try:
+            with HASH_DB_FILE.open("r", encoding="utf-8") as f:
+                return set(json.load(f))
+        except Exception:
+            logging.exception("Failed to read hash db; starting fresh.")
+    return set()
+
+
+def _save_hash_db(db):
+    try:
+        HASH_DB_FILE.write_text(json.dumps(list(db)), encoding="utf-8")
+    except Exception:
+        logging.exception("Failed to save hash db.")
+
 
 def find_playlist(youtube, name):
     page_token = None
@@ -201,6 +239,7 @@ def find_playlist(youtube, name):
 
         if not page_token:
             return None
+
 
 def get_or_create_playlist(youtube, name, cfg):
     existing = find_playlist(youtube, name)
@@ -225,6 +264,7 @@ def get_or_create_playlist(youtube, name, cfg):
     logging.info("Created playlist: %s | %s", name, playlist_id)
     return playlist_id
 
+
 def add_to_playlist(youtube, playlist_id, video_id):
     youtube.playlistItems().insert(
         part="snippet",
@@ -238,6 +278,7 @@ def add_to_playlist(youtube, playlist_id, video_id):
             }
         }
     ).execute()
+
 
 def upload_video(youtube, path, watch, cfg):
     title = make_title(path, watch, cfg)
@@ -294,6 +335,7 @@ def upload_video(youtube, path, watch, cfg):
 
     return response["id"], title
 
+
 def safe_move(path, destination_dir):
     destination_dir.mkdir(parents=True, exist_ok=True)
 
@@ -306,7 +348,8 @@ def safe_move(path, destination_dir):
 
     shutil.move(str(path), str(destination))
 
-def process_file(youtube, path, watch, cfg):
+
+def process_file(youtube, path, watch, cfg, hash_db):
     game = game_name(path, watch)
 
     logging.info("Detected: %s", path)
@@ -319,6 +362,23 @@ def process_file(youtube, path, watch, cfg):
         logging.warning("File disappeared before it became stable: %s", path)
         return
 
+    # Skip duplicates by file hash
+    try:
+        import hashlib
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        file_hash = h.hexdigest()
+    except Exception:
+        logging.exception("Failed to compute hash for %s; proceeding.", path)
+        file_hash = None
+
+    if file_hash and file_hash in hash_db:
+        logging.info("Skipping duplicate (hash match): %s", path)
+        safe_move(path, Path(cfg["uploaded_folder"]) / game)
+        return
+
     try:
         video_id, title = upload_video(youtube, path, watch, cfg)
 
@@ -329,6 +389,9 @@ def process_file(youtube, path, watch, cfg):
             path,
             Path(cfg["uploaded_folder"]) / game
         )
+
+        if file_hash:
+            hash_db.add(file_hash)
 
         logging.info(
             "Uploaded: %s | game=%s | playlist=%s | video=%s",
@@ -351,6 +414,7 @@ def process_file(youtube, path, watch, cfg):
         except Exception:
             logging.exception("Could not move failed file.")
 
+
 def main():
     cfg = load_config()
 
@@ -365,6 +429,8 @@ def main():
     replay_cache = watch / "replay_cache"
 
     excluded = [uploaded, failed, replay_cache]
+
+    hash_db = _load_hash_db()
 
     logging.info("One-shot uploader started.")
 
@@ -382,9 +448,12 @@ def main():
         notify("Clips found", f"Found {len(clips)} {noun} ready to upload.")
 
     for path in clips:
-        process_file(youtube, path, watch, cfg)
+        process_file(youtube, path, watch, cfg, hash_db)
+
+    _save_hash_db(hash_db)
 
     logging.info("One-shot uploader finished. Exiting.")
+
 
 if __name__ == "__main__":
     main()
