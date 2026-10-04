@@ -19,6 +19,18 @@ env/
 
 # Uploader state
 .uploaded_hashes.json
+.upload_records.json
+.uploader.lock
+.watcher.lock
+.tools/
+channel_audit.json
+channel_changes*.json
+reviews/
+prepared/
+startup_task_backup.xml
+MAINTENANCE.md
+.env
+.env.*
 
 # Video and temporary media files
 *.mp4

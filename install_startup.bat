@@ -13,12 +13,16 @@ if errorlevel 1 (
     exit /b 1
 )
 
-schtasks /Delete /TN "YouTube Clip Uploader" /F >nul 2>&1
-schtasks /Create /TN "YouTube Clip Uploader" /SC ONLOGON /TR "%PYTHON_CMD% clip_uploader.py" /RL LIMITED /F
+:: Install a silent one-shot sign-in launcher with a resolved Python executable.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install_autorun.ps1"
+if errorlevel 1 (
+    echo ERROR: Could not install the startup task.
+    pause
+    exit /b 1
+)
 
 echo.
-echo Startup task installed.
-echo At each Windows logon it will scan once, upload any clips found,
-echo then exit. It will NOT remain running in the background.
+echo Startup launcher installed.
+echo At sign-in it prepares and uploads new clips once, then exits.
 echo.
 pause
