@@ -1,49 +1,40 @@
-# YouTube and Google authentication secrets
-token.json
-client_secret.json
+# Private: Google key, sign-in, upload history, personal settings
+config.json
 client_secret*.json
 credentials*.json
+token.json
+.upload_records.json
+.uploaded_hashes.json
+.uploader.lock
 *.pem
 *.key
-
-# Runtime output
-*.log
-__pycache__/
-*.py[cod]
-.pytest_cache/
-
-# Local Python environments
-.venv/
-venv/
-env/
-
-# Uploader state
-.uploaded_hashes.json
-.upload_records.json
-.uploader.lock
-.watcher.lock
-.tools/
-channel_audit.json
-channel_changes*.json
-reviews/
-prepared/
-startup_task_backup.xml
-MAINTENANCE.md
 .env
 .env.*
 
-# Video and temporary media files
+# Runtime output
+*.log
+*.log.*
+prepared/
+.write_test
+backup_*.zip
+
+# Build output (rebuild with source\build.bat)
+YouTubeClipUploader.exe
+source/.venv/
+source/build/
+source/dist/
+__pycache__/
+*.py[cod]
+
+# Media
 *.mp4
 *.mkv
 *.mov
-*.avi
-*.webm
 *.part
 *.tmp
 
 # Editor and operating-system files
 .vscode/
 .idea/
-.DS_Store
 Thumbs.db
 desktop.ini

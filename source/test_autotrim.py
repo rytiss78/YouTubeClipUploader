@@ -1,19 +1,10 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
-from auto_prepare import select_bounds
-import clip_uploader as uploader
-import test_uploader
-
-
-def setUpModule():
-    test_uploader.setUpModule()
-
-
-def tearDownModule():
-    test_uploader.tearDownModule()
+import autotrim
+from autotrim import select_bounds
 
 
 class SelectionTests(unittest.TestCase):
@@ -42,18 +33,17 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(select_bounds(40, [20]*5+[0]*30+[20]*5, [-15]*5+[-60]*30+[-15]*5, {})[:2], (0, 40))
 
 
-class PreparationIntegrationTests(test_uploader.RecoveryTests):
-    def test_prepared_media_uploaded_but_original_archived(self):
-        prepared = self.base / 'prepared.mp4'
-        prepared.write_bytes(b'prepared fixture')
-        with patch('auto_prepare.prepare', return_value={'media_path': str(prepared), 'reason': 'trimmed'}) as prepare, \
-             patch.object(uploader, 'upload_video', return_value=('video123', 'Title')) as upload, \
-             patch.object(uploader, 'get_or_create_playlist', return_value='playlist'), \
-             patch.object(uploader, 'add_to_playlist'):
-            self.assertTrue(uploader.process_file(Mock(), self.path, self.watch, self.cfg, self.hashes, self.records))
-            self.assertEqual(upload.call_args.kwargs['media_path'], str(prepared))
-            self.assertTrue(prepared.exists())
-            self.assertEqual((self.base/'uploaded'/'Apex Legends'/'clip.mp4').read_bytes(), b'video fixture')
+class PrepareTests(unittest.TestCase):
+    def test_disabled_uploads_original(self):
+        self.assertEqual(autotrim.prepare(Path('clip.mp4'), 'h', {'enabled': False}, '.')['media_path'], 'clip.mp4')
+
+    def test_failure_falls_back_to_original(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(autotrim, 'inspect_clip', side_effect=RuntimeError('ffmpeg broke')), \
+             patch.object(autotrim.logging, 'warning'):
+            result = autotrim.prepare(Path('clip.mp4'), 'h', {'enabled': True}, tmp)
+        self.assertEqual(result['media_path'], 'clip.mp4')
+        self.assertIsNone(result['thumbnail'])
 
 
 if __name__ == '__main__':

@@ -1,57 +1,87 @@
 # YouTube Clip Uploader
 
-A Windows tool that prepares and uploads gameplay clips to YouTube. It runs
-**once at sign-in and exits**. There is no persistent watcher.
+Uploads your gameplay recordings to YouTube by itself. Each game folder becomes a
+playlist, and each uploaded recording is moved into an archive folder. It runs once
+when you sign in to Windows, then closes. Nothing stays running in the background.
 
-## What it does
+## Setup (once, about 10 minutes)
 
-- Scans game folders for stable MP4 recordings, excluding archives and replay caches.
-- Automatically trims clearly quiet beginnings and endings using motion and audio,
-  while retaining context. Short or ambiguous clips keep their full length.
-- Selects a thumbnail and generates factual titles, descriptions, and game tags.
-- Uploads clips to their game playlists and archives the original recordings intact.
-- Saves video IDs before post-upload steps so retries can finish without re-uploading.
+Open **YouTubeClipUploader.exe** and follow the three steps in the window:
 
-Trimming is a conservative local heuristic. It does not recognize kills, wins, or
-other game events. Exported trims preserve resolution, frame rate, and audio and
-are checked before uploading.
+1. **Google API key.** Click **How do I get this?** for step-by-step instructions.
+   You create a free key in Google Cloud
+   ([your keys](https://console.cloud.google.com/auth/clients)). Then either click
+   **Paste key…** and paste the Client ID and Client secret, or download the JSON
+   file and click **Choose file…**.
+2. **YouTube channel.** Click **Sign in…**, pick your account and channel in the
+   browser, and allow access. Google warns that the app is not verified. That is
+   normal for your own key: click *Advanced*, then *Go to … (unsafe)*.
+3. **Settings.** Pick your recordings folder (for example `Videos\Radeon ReLive`)
+   and the visibility. Leave **Upload new clips automatically each time I sign in to
+   Windows** ticked. Then click **Save settings**.
 
-## Setup
+Click **Upload now** to test it.
 
-Requires Windows and Python 3.10 or newer, with the `py` launcher available.
+## Everyday use
 
-1. Run `install.bat` to install dependencies.
-2. Supply your own Google OAuth desktop-client credentials as `client_secret.json`.
-3. Edit `config.json` for your source/archive folders and your YouTube channel ID
-   (`expected_channel_id`). The included configuration is for the owner's channel.
-4. Run `first_run.bat` to authorize and perform one upload pass.
-5. Run `install_startup.bat` to install a user Startup shortcut. Each Windows sign-in
-   will run one unattended preparation/upload pass and exit.
+There is nothing to do. Record clips as usual. At the next Windows sign-in, the
+uploader waits for the drive and the internet and uploads every finished clip. Then
+it shows a notification and closes.
 
-Clips recorded after a startup pass are processed at your next sign-in or manual run.
-No administrator access or running Codex app is required for the Startup shortcut.
-Unattended runs stop with a notification if Google authorization needs renewal.
+- **Upload right away:** open the app and click **Upload now**.
+- **See what would be uploaded:** click **Preview**. Nothing is uploaded.
+- **Something went wrong:** a failed clip stays where it is and is retried next
+  time. Click **Open full log** for details.
 
-## Useful commands
+## Good to know
 
-```powershell
-# Preview metadata without uploads or file moves
-py -3 clip_uploader.py --dry-run
+- **Sign-in stops working every 7 days:** your Google project is still in
+  "Testing". In Google Cloud, go to *Google Auth Platform → Audience*, click
+  **Publish app**, and then sign in again in the app.
+- **Daily limit:** a normal Google project can upload about 6 videos a day. Extra
+  clips wait for the next run.
+- **Videos stuck on Private:** Google can lock uploads from new, unaudited projects
+  as private. Request the free YouTube API compliance audit from Google.
+- **Custom thumbnails** need a phone-verified YouTube channel. Without one, YouTube
+  picks the thumbnail.
+- **Automatic trimming** cuts only quiet, still footage at the start and end of a
+  clip, and keeps a few seconds of context. Your original recording is never
+  changed. It does not detect kills or wins.
+- **Your own title for one clip:** put a `.json` file with the same name next to
+  the recording:
 
-# One unattended run
-py -3 clip_uploader.py --non-interactive
+  ```json
+  {
+      "title": "M4A1-S Through the Smoke on Office | CS2",
+      "description": "M4A1-S gameplay on Office in Counter-Strike 2.",
+      "tags": ["CS2", "Office"],
+      "thumbnail": "my-thumbnail.jpg"
+  }
+  ```
 
-# Regression checks
-py -3 -m unittest -v test_uploader test_auto_prepare
+  Every field is optional.
+
+## Files in this folder
+
+| File | What it is |
+|---|---|
+| `YouTubeClipUploader.exe` | The app. Keep it in this folder. |
+| `config.json` | Your settings. More options: `title_format`, `tags`, `category_id`, `playlist_privacy`, and the trimming thresholds under `auto_prepare`. |
+| `client_secret.json`, `token.json` | Your Google key and sign-in. **Keep them private.** |
+| `.upload_records.json` | The upload history, which prevents duplicate uploads. Back it up and don't delete it. |
+| `uploader.log` | What happened on each run. |
+| `source\` | The source code. Run `source\build.bat` to rebuild the .exe. |
+
+To stop the automatic uploads, untick the Windows sign-in option in the app and
+click **Save settings**.
+
+## For developers
+
+```bash
+cd source
+py -3 -m unittest -v      # tests
+py -3 app.py              # window
+py -3 app.py --dry-run    # list clips and titles
+py -3 app.py --run        # one silent upload pass
+build.bat                 # build ..\YouTubeClipUploader.exe
 ```
-
-Optional companion JSON files allow custom titles, descriptions, tags, and thumbnails.
-The manual `prepare_clip.py` utility can make contact sheets or explicitly selected
-trims. See [README.txt](README.txt) for those options and recovery details.
-
-## Credentials and local data
-
-This repository does **not** include OAuth credentials, access/refresh tokens,
-recordings, upload history, logs, or channel audit backups. Keep those files private.
-They are excluded by `.gitignore`. Never commit `client_secret.json`, `token.json`,
-or an `.env` file. Each user must provide their own credentials.
